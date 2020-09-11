@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Past Paper Crawler</title>
+        <link rel="stylesheet" href="../../library/element-ui.css" />
+        <style>
+            .slide-fade-enter-active {
+                transition: all .3s;
+            }
+            .slide-fade-leave-active {
+                transition: all .3s;
+            }
+            .slide-fade-enter {
+                transform: translateX(10px);
+            }
+            .slide-fade-leave-to {
+                transform: translateX(-10px);
+            }
+            .slide-fade-enter, .slide-fade-leave-to {
+                opacity: 0;
+            }
+        </style>
+    </head>
+    <body style="margin: 0; height: 100vh">
+        <div id="root" style="height: 100%">
+            <template>
+                <el-container style="height: 100%" v-loading="loading">
+                    <el-aside width="300px">
+                        <el-menu :default-active="activeIndex" style="height: 100%" @select="menuSelected">
+                            <div
+                                    style="
+                                        padding-top: 15px;
+                                        padding-bottom: 15px;
+                                        display: flex;
+                                        flex-direction: column;
+                                        align-items: center;
+                                    "
+                            >
+                                <div style="display: flex; flex-direction: row; align-items: center">
+                                    <img
+                                            style="width: 60px; height: 60px; margin-right: 10px"
+                                            src="../../static/resources/icon.png"
+                                            alt=""
+                                    >
+                                    <span>
+                                        <h3 style="margin-block-start: 0; margin-block-end: 0">
+                                            Past Paper Crawler
+                                        </h3>
+                                        <p style="margin-block-start: 0; margin-block-end: 0; color: gray; font-size: 14px">
+                                            A best access to past papers
+                                        </p>
+                                        <el-tag type="success" size="mini">
+                                            {{ applicationVersion }}
+                                        </el-tag>
+                                    </span>
+                                </div>
+                            </div>
+                            <el-menu-item-group v-if="recentSubjects.length > 0" title="Recent Subjects">
+                                <el-menu-item
+                                        v-for="(subject, index) in recentSubjects"
+                                        :index="index"
+                                >
+                                    <div style="display: flex; align-items: center; width: 100%">
+                                        <i class="el-icon-collection"></i>
+                                        <span style="display: inline; flex: 1; text-overflow: ellipsis; overflow: hidden">
+                                            {{subject.name}}
+                                        </span>
+                                        <el-link :underline="false" @click="handleRemoveRecent(subject)">
+                                            <i class="el-icon-close"></i>
+                                        </el-link>
+                                    </div>
+                                </el-menu-item>
+                            </el-menu-item-group>
+                            <el-menu-item-group title="Common">
+                                <el-menu-item index="browse">
+                                    <i class="el-icon-collection"></i>
+                                    <span>Browse Subject</span>
+                                </el-menu-item>
+                                <el-menu-item index="download">
+                                    <i class="el-icon-download"></i>
+                                    <span>Downloading</span>
+                                </el-menu-item>
+                                <el-menu-item index="config">
+                                    <i class="el-icon-setting"></i>
+                                    <span>Config</span>
+                                </el-menu-item>
+                            </el-menu-item-group>
+                        </el-menu>
+                    </el-aside>
+                    <transition name="slide-fade" mode="out-in">
+                        <el-container key="container1" v-if="activeIndex !== 'download' && activeIndex !== 'config'">
+                            <el-alert
+                                    v-if="watchPath"
+                                    :title="'Default path configured: ' + watchPath"
+                                    type="info"
+                                    :closable=false
+                                    style="margin-top: 5px; margin-left: 5px; margin-right: 5px; width: auto"
+                            ></el-alert>
+                            <el-header height="80px" style="padding: 20px 30px 30px;">
+                                <el-select style="width: 18%" v-model="level" placeholder="Please select level">
+                                    <el-option
+                                            v-for="item in levels"
+                                            :key="item.label"
+                                            :label="item.label"
+                                            :value="item.value"
+                                    >
+                                    </el-option>
+                                </el-select>
+                                <el-select filterable style="width: 72%" :disabled="subjects.length === 0" v-loading="loadingSubjects" v-model="subject" placeholder="Please select subject">
+                                    <el-option
+                                            v-for="item in subjects"
+                                            :key="item.label"
+                                            :label="item.label"
+                                            :value="item.value"
+                                    >
+                                    </el-option>
+                                </el-select>
+                                <el-link style="margin-left: 6px" type="primary" @click="forceReloadCurrentSubject">
+                                    Refresh
+                                </el-link>
+                                <el-select :disabled="loadingPapers || browser.allPapers.length === 0" size="small" collapse-tags style="margin-top: 7px; width: 18%" v-model="browser.filter.year" multiple placeholder="All Years">
+                                    <el-option
+                                            v-for="item in browser.filterOptions.year"
+                                            :key="item.value"
+                                            :label="item.label"
+                                            :value="item.value">
+                                    </el-option>
+                                </el-select>
+                                <el-select :disabled="loadingPapers || browser.allPapers.length === 0" size="small" collapse-tags style="margin-top: 7px; width: 18%" v-model="browser.filter.season" multiple placeholder="All Seasons">
+                                    <el-option
+                                            v-for="item in browser.filterOptions.season"
+                                            :key="item.value"
+                                            :label="item.label"
+                                            :value="item.value">
+                                    </el-option>
+                                </el-select>
+                                <el-select :disabled="loadingPapers || browser.allPapers.length === 0" size="small" collapse-tags style="margin-top: 7px; width: 18%" v-model="browser.filter.paper" multiple placeholder="All Papers">
+                                    <el-option
+                                            v-for="item in browser.filterOptions.paper"
+                                            :key="item.value"
+                                            :label="item.label"
+                                            :value="item.value">
+                                    </el-option>
+                                </el-select>
+                                <el-select :disabled="loadingPapers || browser.allPapers.length === 0" size="small" collapse-tags style="margin-top: 7px; width: 18%" v-model="browser.filter.region" multiple placeholder="All Regions">
+                                    <el-option
+                                            v-for="item in browser.filterOptions.region"
+                                            :key="item.value"
+                                            :label="item.label"
+                                            :value="item.value">
+                                    </el-option>
+                                </el-select>
+                                <el-select :disabled="loadingPapers || browser.allPapers.length === 0" size="small" collapse-tags style="margin-top: 7px; width: 18%" v-model="browser.filter.type" multiple placeholder="All Types">
+                                    <el-option
+                                            v-for="item in browser.filterOptions.type"
+                                            :key="item.value"
+                                            :label="item.label"
+                                            :value="item.value">
+                                    </el-option>
+                                </el-select>
+
+                                <span style="padding-left: 10px; padding-top: 5px; display: block">
+<!--                                <el-radio v-model="mode" label="qpms">Only QP & MS</el-radio>-->
+                                    <!--                                <el-radio v-model="mode" label="all">All Files</el-radio>-->
+                                    <!--                                <el-checkbox v-model="qpms">Only QP and MS</el-checkbox>-->
+                            </span>
+                            </el-header>
+                            <el-main>
+                                <el-table
+                                        v-loading="loadingPapers"
+                                        :show-header=true
+                                        :data="loadingPapers ? [] : browser.shownPapers"
+                                        style="width: 100%"
+                                        :row-key="getRowKey"
+                                        height="100%"
+                                        empty-text="No data"
+                                >
+                                    <el-table-column>
+                                        <template slot="header" slot-scope="scope">
+                                            <el-select
+                                                    size="mini"
+                                                    style="width: 20%"
+                                                    v-model="mode"
+                                            >
+                                                <el-option
+                                                        label="Only QP & MS"
+                                                        value="qpms"
+                                                >
+                                                </el-option>
+                                                <el-option
+                                                        label="All Files"
+                                                        value="all"
+                                                >
+                                                </el-option>
+                                            </el-select>
+                                            <el-input
+                                                    style="width: 70%"
+                                                    v-model="browser.filter.name"
+                                                    size="mini"
+                                                    placeholder="Search"
+                                                    clearable
+                                            ></el-input>
+                                        </template>
+                                        <template slot-scope="scope">
+                                            <template v-if="browser.mode === 'qpms'">
+                                                <el-popover
+                                                        placement="top"
+                                                        trigger="hover"
+                                                        open-delay="500"
+                                                >
+                                                    <div>
+                                                        {{scope.row.name}}
+                                                    </div>
+                                                    <div slot="reference" style="width: fit-content">
+                                                        <i v-if="scope.row.info.type === 'qp'" class="el-icon-edit-outline"></i>
+                                                        <i v-else-if="scope.row.info.type === 'ms'" class="el-icon-finished"></i>
+                                                        {{scope.row.qpmsName}}
+                                                    </div>
+                                                </el-popover>
+                                            </template>
+                                            <template v-else>
+                                                <i class="el-icon-document"></i>
+                                                {{scope.row.name}}
+                                            </template>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column
+                                            width="100"
+                                            label="Preview"
+                                    >
+                                        <template slot-scope="scope">
+                                            <el-link
+                                                    :disabled="!scope.row.name.endsWith('.pdf')"
+                                                    type="primary"
+                                                    @click="handleClickView(scope.row)"
+                                            >
+                                                {{scope.row.existed ? 'Open' : 'Preview' }}
+                                            </el-link>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column
+                                            width="130"
+                                    >
+                                        <template slot="header" slot-scope="scope">
+                                            <el-popover
+                                                    placement="bottom"
+                                                    trigger="hover"
+                                            >
+                                                <div style="display: flex; flex-direction: column; align-items: center; width: 100%">
+                                                    <el-button-group>
+                                                        <el-button
+                                                                v-if="browser.shownPapers && selectedCount < browser.shownPapers.length"
+                                                                size="mini"
+                                                                type="primary"
+                                                                @click="handleSetAll(true)"
+                                                        >
+                                                            Select All
+                                                        </el-button>
+                                                        <el-button
+                                                                v-if="selectedCount > 0"
+                                                                size="mini"
+                                                                @click="handleSetAll(false)"
+                                                        >
+                                                            Unselect All
+                                                        </el-button>
+                                                    </el-button-group>
+                                                </div>
+                                                <div slot="reference">
+                                                    <el-button
+                                                            v-if="selectedCount > 0"
+                                                            size="mini"
+                                                            type="primary"
+                                                            @click="handleClickDownload"
+                                                    >
+                                                        Download ({{selectedCount}})
+                                                    </el-button>
+                                                    <span
+                                                            v-else
+                                                    >
+                                            Download
+                                        </span>
+                                                </div>
+                                            </el-popover>
+                                        </template>
+                                        <template slot-scope="scope">
+                                            <template v-if="scope.row.existed">
+                                                <el-link
+                                                        type="success"
+                                                        @click="handleRevealDownloaded(scope.row)"
+                                                >
+                                                    <i class="el-icon-circle-check"></i>
+                                                    Downloaded
+                                                </el-link>
+                                            </template>
+                                            <template v-else>
+                                                <el-link
+                                                        v-if="scope.row.selected"
+                                                        type="info"
+                                                        @click="scope.row.selected = false"
+                                                >
+                                                    Selected
+                                                </el-link>
+                                                <el-link
+                                                        v-else
+                                                        type="primary"
+                                                        @click="scope.row.selected = true"
+                                                >
+                                                    Select
+                                                </el-link>
+                                            </template>
+                                        </template>
+                                    </el-table-column>
+                                </el-table>
+                            </el-main>
+                        </el-container>
+                        <el-container key="container2" v-if="activeIndex === 'download'">
+                            <el-table
+                                    :show-header=true
+                                    :data="shownDownloadTaskList"
+                                    style="width: 100%"
+                                    :row-key="getDownloadRowKey"
+                                    height="100%"
+                                    empty-text="No data"
+                            >
+                                <el-table-column>
+                                    <template slot="header" slot-scope="scope">
+                                        <div style="display: flex; flex-direction: row">
+                                            <el-button
+                                                    slot="reference"
+                                                    size="mini"
+                                                    type="primary"
+                                                    @click="handleResumeAll"
+                                            >
+                                                Start All
+                                            </el-button>
+                                            <el-button
+                                                    slot="reference"
+                                                    size="mini"
+                                                    type="primary"
+                                                    @click="handleAbortAll"
+                                            >
+                                                Stop All
+                                            </el-button>
+                                            <el-button
+                                                    slot="reference"
+                                                    size="mini"
+                                                    type="primary"
+                                                    @click="handleClearDownload"
+                                            >
+                                                Clear
+                                            </el-button>
+                                        </div>
+                                    </template>
+                                    <template slot-scope="scope">
+                                        <i class="el-icon-document"></i>
+                                        {{scope.row.filename}}
+                                    </template>
+                                </el-table-column>
+                                <el-table-column width="250">
+                                    <template slot="header" slot-scope="scope">
+                                        Progress ({{loadingCount}} downloading)
+                                    </template>
+                                    <template slot-scope="scope">
+                                        <div style="display: flex; flex-direction: row; justify-content: stretch; align-items: center">
+                                            <template v-if="scope.row.status === 'loading'">
+                                                <el-progress style="width: 80%" :percentage="scope.row.progress"></el-progress>
+                                                <el-link type="info" @click="handleAbortTask(scope.row)">
+                                                    stop
+                                                </el-link>
+                                            </template>
+                                            <el-link v-if="scope.row.status === 'success'" type="success" @click="handleRevealFile(scope.row)">
+                                                <i class="el-icon-circle-check"></i>
+                                                success
+                                            </el-link>
+                                            <el-link v-if="scope.row.status === 'fail'" type="danger" @click="handleResumeTask(scope.row)">
+                                                <i class="el-icon-circle-close"></i>
+                                                fail
+                                            </el-link>
+                                            <el-link v-if="scope.row.status === 'aborted'" type="warning" @click="handleResumeTask(scope.row)">
+                                                <i class="el-icon-warning-outline"></i>
+                                                aborted
+                                            </el-link>
+                                            <el-link v-if="scope.row.status === 'aborted'" style="margin-left: 10px" type="danger" @click="handleRemoveTask(scope.row)">
+                                                remove
+                                            </el-link>
+                                            <el-link v-if="scope.row.status === 'waiting'" type="info" @click="handleAbortTask(scope.row)">
+                                                waiting...
+                                            </el-link>
+                                        </div>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </el-container>
+                        <el-container key="container3" v-if="activeIndex === 'config'">
+                            <div style="padding-left: 30px; padding-top: 20px; padding-right: 30px">
+                                <span style="color: gray; font-size: small">Settings on this page will be effective for all subjects<br></span>
+                                <el-divider></el-divider>
+                                <h3 style="color: gray">Common</h3>
+                                <span style="color: gray; font-size: small">
+                                Data source:
+                                <el-select
+                                        style="margin-left: 2px; margin-right: 2px; width: 400px"
+                                        size="small"
+                                        v-model="dataSource"
+                                        v-loading="loadingSource"
+                                >
+                                    <el-option
+                                            v-for="website in websites"
+                                            :value=website
+                                            :label=website
+                                    ></el-option>
+                                </el-select>
+                                <el-link style="margin-left: 10px" type="primary" @click="rebuildWebsiteIndex">
+                                    rebuild website index
+                                </el-link>
+                                <br/>
+                                <el-alert
+                                        type="error"
+                                        :closable=false
+                                        style="margin-top: 14px"
+                                >
+                                    If you have programming experiences, you can customize data sources by editing the script; restart to apply changes
+                                    <el-button size="mini" style="margin-left: 10px" @click="handleOpenDataSourcesFolder">
+                                        open folder
+                                    </el-button>
+                                </el-alert>
+                            </span>
+                                <el-divider></el-divider>
+                                <h3 style="color: gray">Download</h3>
+                                <el-checkbox v-model="settings.useDefaultPath">Use Default Download Path</el-checkbox>
+                                <div style="margin-left: 20px; padding-top: 10px">
+                                    <el-input size="small" v-model="settings.defaultPath" :disabled="!settings.useDefaultPath">
+                                        <el-button slot="append" icon="el-icon-folder-opened" @click="handleClickBrowse"></el-button>
+                                    </el-input>
+                                    <el-checkbox style="margin-top: 10px" v-model="settings.createSubjectFolder" :disabled="!settings.useDefaultPath">Create Subject Folder</el-checkbox>
+                                    <el-alert
+                                            title="The software can automatically detect whether a past paper is already downloaded or not if a default path is set"
+                                            type="info"
+                                            :closable=false
+                                            style="margin-top: 10px"
+                                    ></el-alert>
+                                </div>
+                            </div>
+                        </el-container>
+                    </transition>
+                </el-container>
+            </template>
+        </div>
+        <script src="../../library/vue.min.js"></script>
+        <script src="../../library/element-ui.js"></script>
+        <script>
+            // nodejs
+            const { remote: { BrowserWindow, dialog, getCurrentWindow }, shell } = require('electron')
+            const PDFWindow = require('electron-pdf-window')
+            const path = require('path')
+
+            // js
+            const { watchChange } = require('../../core/file-model')
+            const { ResourcePool } = require('../../core/resource-pool')
+            const { PaperBrowser } = require('../../core/paper-brower')
+            const { DownloadQueue } = require('../../core/download-queue')
+            const { createSettingObject } = require('../../core/setting-object')
+            const settings = createSettingObject('subject-view-settings', {
+                dataSource: '',
+                selectedLevel: '',
+                showMode: 'qpms',
+                useDefaultPath: false,
+                defaultPath: '',
+                createSubjectFolder: false,
+            })
+            const { getDataSourcesFolderPath } = require('../../core/util')
+
+            PaperBrowser.setMode(settings.showMode)
+
+            // file watcher instance that will be set in main process
+            let fileWatcher = null
+
+            const allWebsites = ResourcePool.getWebsiteNameList()
+            if (!allWebsites.includes(settings.dataSource)) {
+                settings.dataSource = allWebsites[0]
+            }
+
+            // main
+            new Vue({
+                el: '#root',
+                data: {
+                    applicationVersion: '1.0.0-beta.1',
+
+                    recentSubjects: [],
+                    loading: true,
+                    containerLoading: false,
+
+                    mode: settings.showMode,
+                    qpms: false,
+                    dataSource: settings.dataSource,
+                    search: '',
+                    level: '',
+                    levels: [],
+                    subject: '',
+                    subjects: [],
+
+                    loadedSubject: null,
+
+                    activeIndex: 'browse',
+                    activeMode: 'qpms',
+                    loadingSubjects: false,
+                    loadingPapers: false,
+                    loadingSource: false,
+
+                    browser: PaperBrowser,
+
+                    settings,
+
+                    websites: ResourcePool.getWebsiteNameList(),
+
+                    downloadTaskList: DownloadQueue.getTaskList(),
+                },
+                created() {
+                    ResourcePool.init(settings.dataSource).then(() => {
+                        this.levels = ResourcePool.getLevels().map((level, index) => ({
+                            label: level.name,
+                            value: index,
+                            originalValue: level,
+                        }))
+                        if (settings.selectedLevel !== '') {
+                            this.level = settings.selectedLevel
+                        }
+                        this.recentSubjects = ResourcePool.getRecentSubjects()
+                        this.loading = false
+                    })
+                },
+                computed: {
+                    watchPath: function () {
+                        console.log('refreshed')
+
+                        if (fileWatcher) {
+                            console.log('close')
+                            fileWatcher.close()
+                        }
+
+                        if (!settings.useDefaultPath) {
+                            if (!this.loading) {
+                                this.browser.allPapers.forEach(f => f.existed = false)
+                            }
+                            return null
+                        }
+
+                        let p = this.settings.defaultPath
+                        if (!this.loadedSubject) {
+                            return p
+                        }
+
+                        if (this.settings.createSubjectFolder)
+                            p = path.join(p, this.loadedSubject.name)
+
+                        if (!this.loading) {
+                            fileWatcher = watchChange(p, this.browser.allPapers, f => {
+                                if (f.existed) f.selected = false
+                            })
+                        }
+
+                        return p
+                    },
+
+                    selectedCount: function () {
+                        if (this.loadingPapers) return 0
+                        let count = 0
+                        this.browser.allPapers.forEach(paper => count += paper.selected ? 1 : 0)
+                        return count
+                    },
+                    shownDownloadTaskList: function () {
+                        const front = []
+                        const end = []
+                        this.downloadTaskList.forEach(task =>
+                            ((task.status !== 'success') ? front : end).push(task))
+                        // front.reverse()
+                        // end.reverse()
+                        return front.concat(end)
+                    },
+                    loadingCount: function () {
+                        let count = 0
+                        this.downloadTaskList.forEach(task => count +=
+                            (task.status === 'loading' || task.status === 'waiting') ? 1 : 0)
+                        return count
+                    },
+                },
+                watch: {
+                    level: function (newValue) {
+                        if (newValue === '') return;
+
+                        this.subject = ''
+                        settings.selectedLevel = newValue
+                        const subjects = ResourcePool.getSubjects(this.levels[newValue].originalValue)
+                        // console.log(subjects)
+                        this.subjects = subjects.map((s, index) => ({
+                            label: s.name,
+                            value: index,
+                            originalValue: s,
+                        }))
+                    },
+                    subject: function (newValue) {
+                        if (newValue === '') {
+                            this.loadSubject(null)
+                            return
+                        }
+
+                        const subject = this.subjects[newValue]?.originalValue
+                        const index = this.recentSubjects.findIndex(s => {
+                            return subject?.name === s.name
+                        })
+                        if (index !== -1) {
+                            this.activeIndex = index
+                        } else {
+                            this.activeIndex = 0
+                        }
+                        this.loadSubject(subject)
+                    },
+                    qpms: function (newValue) {
+                        if (newValue) {
+                            this.browser.setMode('qpms')
+                        } else {
+                            this.browser.setMode('all')
+                        }
+                    },
+                    mode: function (newValue) {
+                        this.browser.setMode(newValue)
+                        settings.showMode = newValue
+                    },
+
+                    // recentSubjects: function (newValue) {
+                    //     const current = this.loadedSubject
+                    //     const index = newValue.findIndex(subject => {
+                    //         return subject.name === current.name
+                    //     })
+                    //     if (index === -1) {
+                    //         this.activeIndex = index
+                    //     }
+                    // },
+
+                    dataSource: function (newValue) {
+                        this.loadingSource = true
+                        ResourcePool.selectWebsite(newValue).then(() => {
+                            this.loadingSource = false
+                            console.log(this.recentSubjects)
+                            this.levels = ResourcePool.getLevels().map((level, index) => ({
+                                label: level.name,
+                                value: index,
+                                originalValue: level,
+                            }))
+                            const temp = this.level
+                            this.level = ''
+                            this.$nextTick(() => this.level = temp)
+                            this.subject = ''
+                            settings.dataSource = newValue
+                        })
+                    },
+                },
+                methods: {
+                    forceReloadCurrentSubject() {
+                        if (this.subject === '') {
+                            return
+                        }
+                        const subject = this.subjects[this.subject].originalValue
+                        this.loadSubject(subject, true)
+                    },
+                    loadSubject(subject, forceReload = false) {
+                        if (!subject) {
+                            this.browser.feedPapers([])
+                            this.loadedSubject = null
+                            this.loadingPapers = false
+                            return
+                        }
+
+                        this.loadingPapers = true
+                        this.loadedSubject = subject
+                        setTimeout(() => {
+                            ResourcePool.getPapers(subject, forceReload).then(papers => {
+                                if (this.loadedSubject !== subject) return
+                                this.browser.feedPapers(papers.map(p => ({
+                                    ...p,
+                                    selected: false,
+                                    existed: false,
+                                })))
+                                this.loadingPapers = false
+                            })
+                        }, 200)
+                    },
+                    async menuSelected(index) {
+                        this.containerLoading = true
+                        await this.$nextTick()
+                        if (typeof index === 'number') {
+                            const subject = this.recentSubjects[index]
+                            console.log(index)
+                            if (!subject) {
+                                this.subject = ''
+                                this.activeIndex = ''
+                                await this.$nextTick()
+                                this.activeIndex = 'browse'
+                                this.containerLoading = false
+                                return
+                            } else if (!subject.disabled) {
+                                this.level = ''
+                                await this.$nextTick()
+                                this.level = this.levels.findIndex(value => value.label === subject.level.name)
+                                await this.$nextTick()
+                                this.subject = this.subjects.findIndex(value => value.label === subject.name)
+                            }
+                        } else if (index === 'browse') {
+                            this.subject = ''
+                        }
+                        this.$nextTick()
+                        this.activeIndex = index
+                        this.containerLoading = false
+                    },
+                    handleRemoveRecent(subject) {
+                        ResourcePool.removeRecentSubject(subject)
+                    },
+
+                    getRowKey(row) {
+                        return row.name
+                    },
+                    getDownloadRowKey(row) {
+                        return row.id
+                    },
+
+                    handleClickView(paper) {
+                        const win = new BrowserWindow({
+                            width: 800,
+                            height: 600
+                        })
+
+                        PDFWindow.addSupport(win)
+
+                        if (settings.useDefaultPath && paper.existed) {
+                            win.loadURL('file://' + path.join(this.watchPath, paper.name))
+                        } else {
+                            win.loadURL(paper.url)
+                        }
+                    },
+                    handleSetAll(value) {
+                        if (value === true) {
+                            this.browser.shownPapers.forEach(paper => {
+                                if (!paper.existed) paper.selected = true
+                            })
+                        } else if (value === false) {
+                            this.browser.allPapers.forEach(paper => paper.selected = false)
+                        }
+                    },
+                    async handleClickDownload() {
+                        let downloadPath = ''
+                        if (settings.useDefaultPath) {
+                            downloadPath = settings.defaultPath
+                        } else {
+                            const res = await dialog.showOpenDialog(getCurrentWindow(), {
+                                properties: ['openDirectory', 'createDirectory'],
+                            })
+                            if (res && !res.canceled && res.filePaths.length > 0) {
+                                downloadPath = res.filePaths[0]
+                            } else {
+                                return  // abort download if canceled
+                            }
+                        }
+                        if (settings.createSubjectFolder) {
+                            if (!downloadPath.endsWith('/'))
+                                downloadPath += '/'
+                            downloadPath += this.subjects[this.subject].label
+                        }
+                        this.activeIndex = 'download'
+                        this.browser.allPapers.forEach(paper => {
+                            if (paper.selected) {
+                                DownloadQueue.addTask(paper.url, downloadPath)
+                            }
+                        })
+                    },
+                    handleRevealDownloaded(file) {
+                        if (settings.useDefaultPath) {
+                            shell.showItemInFolder(path.join(this.watchPath, file.name))
+                        }
+                    },
+
+                    handleResumeAll() {
+                        DownloadQueue.resumeAll()
+                    },
+                    handleAbortAll() {
+                        DownloadQueue.abortAll()
+                    },
+                    handleClearDownload() {
+                        DownloadQueue.clearTaskList()
+                    },
+                    handleResumeTask(task) {
+                        task.resume()
+                        console.log(task.status)
+                    },
+                    handleAbortTask(task) {
+                        task.abort()
+                    },
+                    handleRemoveTask(task) {
+                        task.remove()
+                    },
+                    handleRevealFile(task) {
+                        shell.showItemInFolder(task.targetFilePath)
+                    },
+
+                    handleClickBrowse() {
+                        dialog.showOpenDialog(getCurrentWindow(), {
+                            properties: ['openDirectory', 'createDirectory'],
+                        }).then(value => {
+                            if (value && !value.canceled && value.filePaths.length > 0) {
+                                settings.defaultPath = value.filePaths[0]
+                            }
+                        })
+                    },
+
+                    async rebuildWebsiteIndex() {
+                        this.loadingSource = true
+                        await ResourcePool.rebuildIndex()
+                        this.loadingSource = false
+                        console.log(this.recentSubjects)
+                        this.levels = ResourcePool.getLevels().map((level, index) => ({
+                            label: level.name,
+                            value: index,
+                            originalValue: level,
+                        }))
+                        const temp = this.level
+                        this.level = ''
+                        await this.$nextTick()
+                        this.level = temp
+                        this.subject = ''
+                    },
+
+                    handleOpenDataSourcesFolder() {
+                        shell.openItem(getDataSourcesFolderPath())
+                    }
+                }
+            })
+        </script>
+    </body>
+</html>

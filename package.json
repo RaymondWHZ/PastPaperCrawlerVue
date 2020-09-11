@@ -1,0 +1,26 @@
+{
+  "name": "PastPaperCrawlerVue",
+  "version": "1.0.0-beta.1",
+  "main": "main.js",
+  "license": "MIT",
+  "build": {
+    "directories": {
+      "buildResources": "build/resources"
+    },
+    "extraResources": {
+      "from": "./resources/",
+      "to": "./"
+    }
+  },
+  "devDependencies": {
+    "electron": "^8.2.3",
+    "electron-builder": "^22.4.1"
+  },
+  "dependencies": {
+    "electron-pdf-window": "^1.0.12"
+  },
+  "scripts": {
+    "start": "NODE_ENV=dev electron .",
+    "dist": "electron-builder . -m -w"
+  }
+}
