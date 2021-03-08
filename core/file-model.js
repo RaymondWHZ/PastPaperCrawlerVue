@@ -1,39 +1,50 @@
+/*
+
+This file implements folder monitoring function.
+
+ */
+
 
 const fs = require('fs')
 const path = require('path')
 
-// add a watcher over watchingFiles without replacing them
-// it is not recommended to edit this field afterwards
-// promised: each element in watching files should be an object that has property 'name' that indicates their name
-// and they will have a field named 'existed' that is a boolean that indicates whether they are present
-// call close() of the returned value to end watching (the method will not reset field 'existed')
-function watchChange(watchPath, watchingFiles, onChangedState) {
-    // fs.mkdirSync(watchPath, { recursive: true })
-    // const watcher = fs.watch(watchPath, (event, filename) => {
-    //     if (event === 'rename') {
-    //         const target = watchingFiles.find(f => f.name === filename)
-    //         if (target) {
-    //             target.existed = fs.existsSync(path.join(watchPath, filename))
-    //             onChangedState(f)
-    //         }
-    //     }
-    // })
-    // let dirExists = true
-    const fullScan = () => {
-        watchingFiles.forEach(f => {
-            f.existed = fs.existsSync(path.join(watchPath, f.name))
-            onChangedState(f)
-        })
-        // console.log('scanned')
-    }
-    fullScan()
-    const interval = setInterval(fullScan, 2000)
+function updateWatchingFilesStatus(watchPath, watchingFiles, handleChangeState) {
+    watchingFiles.forEach(file => {
+        const existedBeforeUpdating = file.existed
+        const filePath = path.join(watchPath, file.name)
+        file.existed = fs.existsSync(filePath)
+        if (existedBeforeUpdating !== file.existed) {
+            handleChangeState(file)
+        }
+    })
+}
+
+function executePeriodically(action) {  // returns the interval object
+    action()
+    return setInterval(
+        action,
+        2000
+    )
+}
+
+function makeWatchControllerObject(intervalObject) {
     return {
         close() {
-            // watcher.close()
-            clearInterval(interval)
-        },
+            clearInterval(intervalObject)
+        }
     }
+}
+
+// add a watcher over watchingFiles, a list of file instances
+// each file instance should have a field 'name' to represent the file name
+// a field 'existed' will be placed into each file instance to represent whether the file is existed on disk
+// the field will be automatically updated
+// the function returns a watcherController instance, call watcherController.close() to end watching
+function watchChange(watchPath, watchingFiles, handleChangeState) {
+    const intervalObject = executePeriodically(() => {
+        updateWatchingFilesStatus(watchPath, watchingFiles, handleChangeState)
+    })
+    return makeWatchControllerObject(intervalObject)
 }
 
 module.exports = {
