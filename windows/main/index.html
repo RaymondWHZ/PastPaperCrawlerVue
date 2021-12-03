@@ -75,7 +75,7 @@
                             <el-menu-item-group title="Common">
                                 <el-menu-item index="browse">
                                     <i class="el-icon-collection"></i>
-                                    <span>Browse Subject</span>
+                                    <span>Papers</span>
                                 </el-menu-item>
                                 <el-menu-item index="download">
                                     <i class="el-icon-download"></i>
@@ -95,9 +95,9 @@
                                     :title="'Default path configured: ' + watchPath"
                                     type="info"
                                     :closable=false
-                                    style="margin-top: 5px; margin-left: 5px; margin-right: 5px; width: auto"
+                                    style="margin-top: 10px; margin-left: 10px; margin-right: 10px; width: auto"
                             ></el-alert>
-                            <el-header height="80px" style="padding: 20px 30px 30px;">
+                            <el-header height="90px" style="padding: 10px">
                                 <el-select style="width: 18%" v-model="level" placeholder="Please select level">
                                     <el-option
                                             v-for="item in levels"
@@ -159,18 +159,12 @@
                                             :value="item.value">
                                     </el-option>
                                 </el-select>
-
-                                <span style="padding-left: 10px; padding-top: 5px; display: block">
-<!--                                <el-radio v-model="mode" label="qpms">Only QP & MS</el-radio>-->
-                                    <!--                                <el-radio v-model="mode" label="all">All Files</el-radio>-->
-                                    <!--                                <el-checkbox v-model="qpms">Only QP and MS</el-checkbox>-->
-                            </span>
                             </el-header>
-                            <el-main>
+                            <el-main style="padding: 0">
                                 <el-table
                                         v-loading="loadingPapers"
                                         :show-header=true
-                                        :data="loadingPapers ? [] : browser.shownPapers"
+                                        :data="loadingPapers ? [] : shownPapers"
                                         style="width: 100%"
                                         :row-key="getRowKey"
                                         height="100%"
@@ -240,7 +234,7 @@
                                         </template>
                                     </el-table-column>
                                     <el-table-column
-                                            width="130"
+                                            width="160"
                                     >
                                         <template slot="header" slot-scope="scope">
                                             <el-popover
@@ -313,6 +307,16 @@
                                     </el-table-column>
                                 </el-table>
                             </el-main>
+                            <el-footer height="50px" style="padding: 8px">
+                                <el-pagination
+                                        :current-page.sync="currentPage"
+                                        :hide-on-single-page=false
+                                        :page-size.sync="pageSize"
+                                        :page-sizes="[200, 300, 400, 500]"
+                                        :total="browser.shownPapers.length"
+                                        layout="prev, pager, next, sizes">
+                                </el-pagination>
+                            </el-footer>
                         </el-container>
                         <el-container key="container2" v-if="activeIndex === 'download'">
                             <el-table
@@ -402,8 +406,10 @@
                                 <el-select
                                         style="margin-left: 2px; margin-right: 2px; width: 400px"
                                         size="small"
-                                        v-model="dataSource"
+                                        :value="dataSource"
+                                        @change="handleDataSourceChanged"
                                         v-loading="loadingSource"
+                                        :disabled="loadingSource"
                                 >
                                     <el-option
                                             v-for="website in websites"
@@ -411,7 +417,7 @@
                                             :label=website
                                     ></el-option>
                                 </el-select>
-                                <el-link style="margin-left: 10px" type="primary" @click="rebuildWebsiteIndex">
+                                <el-link style="margin-left: 10px" type="primary" @click="rebuildWebsiteIndex" :disabled="loadingSource">
                                     rebuild website index
                                 </el-link>
                                 <br/>
@@ -481,11 +487,13 @@
                 settings.dataSource = allWebsites[0]
             }
 
+            let loadSubjectSessionID = 0
+
             // main
             new Vue({
                 el: '#root',
                 data: {
-                    applicationVersion: '1.0.0-beta.1',
+                    applicationVersion: '1.0.0-beta.2',
 
                     recentSubjects: [],
                     loading: true,
@@ -509,6 +517,8 @@
                     loadingSource: false,
 
                     browser: PaperBrowser,
+                    currentPage: 0,
+                    pageSize: 200,
 
                     settings,
 
@@ -516,8 +526,9 @@
 
                     downloadTaskList: DownloadQueue.getTaskList(),
                 },
-                created() {
-                    ResourcePool.init(settings.dataSource).then(() => {
+                async created() {
+                    try {
+                        await ResourcePool.init(settings.dataSource)
                         this.levels = ResourcePool.getLevels().map((level, index) => ({
                             label: level.name,
                             value: index,
@@ -528,7 +539,13 @@
                         }
                         this.recentSubjects = ResourcePool.getRecentSubjects()
                         this.loading = false
-                    })
+                    } catch (e) {
+                        this.$message({
+                            showClose: true,
+                            message: `Loading data source failed: ${e}. Please restart application.`,
+                            type: 'error'
+                        })
+                    }
                 },
                 computed: {
                     watchPath: function () {
@@ -562,6 +579,19 @@
 
                         return p
                     },
+                    shownPapers: function () {
+                        return this.browser.shownPapers.slice((this.currentPage - 1) * this.pageSize, this.currentPage * this.pageSize)
+                    },
+                    pageCount: function () {
+                        const paperCount = this.browser.shownPapers.length
+                        if (paperCount === 0) {
+                            return 0
+                        }
+                        let page = 1
+                        while (page * this.pageSize < paperCount) page++
+                        console.log(page)
+                        return this.browser.shownPapers.length
+                    },
 
                     selectedCount: function () {
                         if (this.loadingPapers) return 0
@@ -576,7 +606,7 @@
                             ((task.status !== 'success') ? front : end).push(task))
                         // front.reverse()
                         // end.reverse()
-                        return front.concat(end)
+                        return front.reverse().concat(end.reverse())
                     },
                     loadingCount: function () {
                         let count = 0
@@ -627,34 +657,23 @@
                         this.browser.setMode(newValue)
                         settings.showMode = newValue
                     },
-
-                    // recentSubjects: function (newValue) {
-                    //     const current = this.loadedSubject
-                    //     const index = newValue.findIndex(subject => {
-                    //         return subject.name === current.name
-                    //     })
-                    //     if (index === -1) {
-                    //         this.activeIndex = index
+                    // dataSource: async function (newValue, oldValue) {
+                    //     this.loadingSource = true
+                    //     try {
+                    //         await ResourcePool.selectWebsite(newValue)
+                    //         this.resetSubjectSelector()
+                    //         settings.dataSource = newValue
+                    //     } catch (e) {
+                    //         this.$message({
+                    //             showClose: true,
+                    //             message: `Switch data source failed: ${e}. Please try refresh.`,
+                    //             type: 'error'
+                    //         })
+                    //         this.dataSource = oldValue
+                    //     } finally {
+                    //         this.loadingSource = false
                     //     }
                     // },
-
-                    dataSource: function (newValue) {
-                        this.loadingSource = true
-                        ResourcePool.selectWebsite(newValue).then(() => {
-                            this.loadingSource = false
-                            console.log(this.recentSubjects)
-                            this.levels = ResourcePool.getLevels().map((level, index) => ({
-                                label: level.name,
-                                value: index,
-                                originalValue: level,
-                            }))
-                            const temp = this.level
-                            this.level = ''
-                            this.$nextTick(() => this.level = temp)
-                            this.subject = ''
-                            settings.dataSource = newValue
-                        })
-                    },
                 },
                 methods: {
                     forceReloadCurrentSubject() {
@@ -674,16 +693,28 @@
 
                         this.loadingPapers = true
                         this.loadedSubject = subject
-                        setTimeout(() => {
-                            ResourcePool.getPapers(subject, forceReload).then(papers => {
-                                if (this.loadedSubject !== subject) return
-                                this.browser.feedPapers(papers.map(p => ({
-                                    ...p,
-                                    selected: false,
-                                    existed: false,
-                                })))
-                                this.loadingPapers = false
-                            })
+
+                        loadSubjectSessionID += 1
+                        const sessionID = loadSubjectSessionID
+
+                        setTimeout(async () => {
+                            try {
+                                const papers = await ResourcePool.getPapers(subject, forceReload)
+                                if (sessionID === loadSubjectSessionID) {  // abort execution if a new session starts
+                                    this.browser.feedPapers(papers.map(p => ({
+                                        ...p,
+                                        selected: false,
+                                        existed: false,
+                                    })))
+                                    this.loadingPapers = false
+                                }
+                            } catch (e) {
+                                this.$message({
+                                    showClose: true,
+                                    message: `Loading paper failed: ${e}. Please try refresh.`,
+                                    type: 'error'
+                                })
+                            }
                         }, 200)
                     },
                     async menuSelected(index) {
@@ -796,7 +827,7 @@
                         task.abort()
                     },
                     handleRemoveTask(task) {
-                        task.remove()
+                        DownloadQueue.removeTask(task)
                     },
                     handleRevealFile(task) {
                         shell.showItemInFolder(task.targetFilePath)
@@ -812,11 +843,42 @@
                         })
                     },
 
+                    async handleDataSourceChanged(newValue) {
+                        this.dataSource = newValue
+                        this.loadingSource = true
+                        try {
+                            await ResourcePool.indexWebsite(newValue)
+                            this.resetSubjectSelector()
+                            settings.dataSource = newValue
+                        } catch (e) {
+                            this.$message({
+                                showClose: true,
+                                message: `Switch data source failed: ${e}. Please try refresh.`,
+                                type: 'error'
+                            })
+                            this.dataSource = ResourcePool.getCurrentWebsiteName()
+                        } finally {
+                            this.loadingSource = false
+                        }
+                    },
+
                     async rebuildWebsiteIndex() {
                         this.loadingSource = true
-                        await ResourcePool.rebuildIndex()
-                        this.loadingSource = false
-                        console.log(this.recentSubjects)
+                        try {
+                            await ResourcePool.indexWebsite(this.dataSource)
+                            this.resetSubjectSelector()
+                        } catch (e) {
+                            this.$message({
+                                showClose: true,
+                                message: `Rebuilding index failed: ${e}. Please try refresh.`,
+                                type: 'error'
+                            })
+                        } finally {
+                            this.loadingSource = false
+                        }
+                    },
+
+                    resetSubjectSelector() {
                         this.levels = ResourcePool.getLevels().map((level, index) => ({
                             label: level.name,
                             value: index,
@@ -824,8 +886,7 @@
                         }))
                         const temp = this.level
                         this.level = ''
-                        await this.$nextTick()
-                        this.level = temp
+                        this.$nextTick(() => this.level = temp)
                         this.subject = ''
                     },
 

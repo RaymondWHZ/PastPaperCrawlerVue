@@ -1,37 +1,24 @@
 const { BrowserWindow, Menu } = require('electron')
 
-const isMac = process.platform === 'darwin'
-const dev = process.env.NODE_ENV === 'dev'
-
-const macMenuTemplate = [
+const menuTemplate = [
     { role: 'appMenu' },
-    { role: 'fileMenu' }
+    { role: 'fileMenu' },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' }
 ]
-
-if (dev) {
-    macMenuTemplate.push({ role: 'viewMenu' })
-} else {
-    macMenuTemplate.push({
-        label: 'View',
-        submenu: [
-            { role: 'togglefullscreen' }
-        ]
-    })
-}
-
-macMenuTemplate.push({ role: 'windowMenu' })
 
 module.exports = function () {
     let win = new BrowserWindow({
         width: 1250,
         height: 800,
         webPreferences: {
-            devTools: dev,
+            devTools: true,
             nodeIntegration: true
         }
     })
 
-    Menu.setApplicationMenu(isMac ? Menu.buildFromTemplate(macMenuTemplate) : null)
+    Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate))
 
     // 加载index.html文件
     win.loadFile('./windows/main/index.html')
